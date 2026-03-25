@@ -1,0 +1,145 @@
+﻿@page "/"
+@using RunTrackerV5App.Data
+@using RunTrackerV5App.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext DB
+@rendermode InteractiveServer
+
+<PageTitle>RunTracker V5</PageTitle>
+
+<div class="container mt-4">
+    <h1 class="mb-4">🏃‍♂️ RunTracker V5: The .NET Era</h1>
+
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card bg-dark text-white shadow-sm">
+                <div class="card-body text-center">
+                    <h6 class="text-uppercase mb-1" style="font-size: 0.7rem; opacity: 0.8;">Lifetime Distance</h6>
+                    <h2 class="mb-0">@allRuns.Sum(r => r.DistanceMiles).ToString("F1") Miles</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card bg-primary text-white shadow-sm">
+                <div class="card-body text-center">
+                    <h6 class="text-uppercase mb-1" style="font-size: 0.7rem; opacity: 0.8;">Total Runs</h6>
+                    <h2 class="mb-0">@allRuns.Count</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-5">
+        <div class="card-body">
+            <h5 class="card-title">@(isEditing ? "Edit Run Details" : "Log a New Run")</h5>
+            <EditForm Model="@newRun" OnValidSubmit="HandleSubmit">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label font-weight-bold">Distance (Miles)</label>
+                        <InputNumber @bind-Value="newRun.DistanceMiles" class="form-control" TValue="decimal" step="0.1" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label font-weight-bold">Pace (Min/Mile)</label>
+                        <InputText @bind-Value="newRun.Pace" class="form-control" placeholder="8:30" />
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end gap-2">
+                        @if (isEditing)
+                        {
+                            <button type="submit" class="btn btn-warning w-100 shadow-sm">Update Run</button>
+                            <button type="button" class="btn btn-secondary" @onclick="CancelEdit">Cancel</button>
+                        }
+                        else
+                        {
+                            <button type="submit" class="btn btn-success w-100 shadow-sm">Save Run</button>
+                        }
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+
+    <h3 class="mb-3">Recent History</h3>
+    @if (allRuns.Count == 0)
+    {
+        <div class="alert alert-light border text-center">No runs found. Time to hit the pavement!</div>
+    }
+    else
+    {
+        <div class="list-group shadow-sm">
+            @foreach (var run in allRuns)
+            {
+                <div class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="badge bg-light text-dark border me-2">@run.DistanceMiles mi</span>
+                        <span class="text-muted">@run.Pace pace</span>
+                        <small class="ms-3 text-secondary">@run.RunDate.ToShortDateString()</small>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-outline-primary btn-sm" @onclick="() => LoadForEdit(run)">Edit</button>
+                        <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteRun(run.Id)">Delete</button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<Run> allRuns = new();
+    private Run newRun = new();
+    private bool isEditing = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRuns();
+    }
+
+    private async Task LoadRuns()
+    {
+        allRuns = await DB.Runs.AsNoTracking().OrderByDescending(r => r.RunDate).ToListAsync();
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (newRun.Id == 0)
+        {
+            DB.Runs.Add(newRun);
+        }
+        else
+        {
+            DB.Entry(newRun).State = EntityState.Modified;
+        }
+
+        await DB.SaveChangesAsync();
+        await LoadRuns();
+        CancelEdit(); 
+    }
+
+    private void LoadForEdit(Run run)
+    {
+        isEditing = true;
+        newRun = new Run {
+            Id = run.Id,
+            DistanceMiles = run.DistanceMiles,
+            Pace = run.Pace,
+            RunDate = run.RunDate
+        };
+    }
+
+    private void CancelEdit()
+    {
+        isEditing = false;
+        newRun = new Run();
+    }
+
+    private async Task DeleteRun(int id)
+    {
+        var run = await DB.Runs.FindAsync(id);
+        if (run != null)
+        {
+            DB.Runs.Remove(run);
+            await DB.SaveChangesAsync();
+            await LoadRuns();
+        }
+    }
+}
